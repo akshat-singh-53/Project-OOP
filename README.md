@@ -11,6 +11,180 @@ notifications, a full audit trail and seven intelligent features.
 
 ---
 
+## Features
+
+### Users and portals
+
+Three kinds of users, each with its own menu, dashboard and colour theme (Employee teal, Support Engineer indigo,
+Administrator orange). Every page and API call checks the user's role.
+
+**Employee / customer**
+- Register an account or log in.
+- Report an incident: choose the affected service, describe the problem, set impact, urgency and number of affected users.
+  While typing, the system suggests a category and warns about similar open incidents.
+- *My incidents*: view and search everything they reported, and follow its status, priority, SLA clock and timeline.
+- Add comments, answer the technician's questions (*Provide info*), read the resolution.
+- Confirm the fix (*Confirm it is fixed*) or reopen it (*Not fixed — reopen*), then rate the support from 1 to 5 stars.
+- Dashboard: open incidents, incidents waiting for their reply, resolved incidents, average resolution time.
+- Employees only ever see their own incidents and never see technicians' internal notes.
+
+**Technician / support engineer** (levels L1, L2, Team Lead)
+- *My assigned queue*, *Unassigned queue* (take an incident for yourself) and *All incidents*.
+- Work an incident: *Acknowledge* → *Start work* → add public or internal investigation notes → *Request info* from the
+  reporter → *Resolve* with resolution details.
+- Re-prioritise (new impact/urgency with a reason), re-categorise, mark as a duplicate of another incident, close.
+- See ranked technician recommendations with the reasons for each score; Team Leads can assign or reassign to anyone.
+- Dashboard: own open incidents, unassigned queue, own incidents at SLA risk, team SLA compliance, workload.
+- Set themselves *Away* on the profile page so automatic assignment skips them.
+- *SLA risk & correlation* page, SLA policies and violations, and the same incident reporting form as employees.
+
+**Administrator / IT manager**
+- Organisation dashboard: totals, open, critical, unassigned, escalated, SLA compliance, average resolution time,
+  average rating, 14-day trend, charts by status / priority / category, resolution time per priority,
+  per-service analysis and technician workload.
+- *Users & technicians*: create, edit, deactivate users and reset passwords; set a technician's level, experience,
+  maximum workload, availability and skills; mark administrators as IT Manager (receives top-level escalations).
+- *Services & categories*: add and edit IT services (business criticality 1–5, default category, owner team) and
+  incident categories (with classification keywords). New categories work everywhere without code changes.
+- *SLA policies & violations*: create and edit policies, run the SLA monitor on demand, list all violations.
+- *Strategies & settings*: switch the assignment strategy and the priority strategy at runtime; turn automatic
+  assignment, e-mail, SMS, escalation and the AI classifier on or off; set the auto-close time; send a test e-mail.
+- *Audit log* (filter by incident, user, action) and *Notification outbox* (every message sent, by channel).
+- Can perform every incident action, including assigning and closing.
+
+Every user also has a *My profile* page (account details, change password) and a *Notifications* page with an
+unread counter in the top bar.
+
+### Incident lifecycle
+
+```
+NEW → CLASSIFIED → ASSIGNED → ACKNOWLEDGED → IN_PROGRESS ⇄ PENDING_INFO → RESOLVED → VERIFIED → CLOSED
+                                                                              ↘ reopened → IN_PROGRESS
+```
+
+- Each status is its own class (State pattern) that allows only the legal next actions, and each action also checks
+  who may do it (for example, only the assigned technician or an administrator can resolve; only the reporter can
+  verify, reopen or give feedback). Illegal moves such as `NEW → CLOSED` are rejected with an error.
+- The incident page only shows the buttons that are valid for the current status and the logged-in user.
+- Each incident stores its ID (e.g. `INC1024`), reporter, service, category, impact, urgency, affected users,
+  priority and score with an explanation, SLA targets and status, assigned technician and assignment method,
+  notes, resolution, feedback, all timestamps and its escalation level.
+- Resolved incidents the reporter does not confirm are closed automatically after 72 hours (configurable).
+- Re-submitting the same incident title within 10 minutes is blocked as a duplicate.
+
+### Priority
+
+Priority is calculated automatically when an incident is reported, with a written explanation. Two strategies, chosen
+in settings:
+
+| Strategy | Formula | Bands |
+|---|---|---|
+| Impact × Urgency × Criticality (default) | impact (1–4) × urgency (1–4) × service criticality (1–5) = 1–80 | P1 ≥ 40, P2 ≥ 20, P3 ≥ 8, else P4 |
+| Weighted scoring | 35 % impact + 30 % urgency + 20 % criticality + 15 % affected users (logarithmic) = 0–100 | P1 ≥ 75, P2 ≥ 55, P3 ≥ 35, else P4 |
+
+Staff can re-prioritise later; the change and its reason go into the audit trail.
+
+### Technician assignment
+
+New incidents are assigned automatically (can be switched off). Four strategies, switchable at runtime:
+
+| Strategy | How it chooses |
+|---|---|
+| Smart (default) | Score out of 100: skill match 40, spare capacity 25, experience 15, history with the same service 10, seniority for P1/P2 10 |
+| Skill-based | Technicians skilled in the incident's category first, then by level and experience |
+| Load-based | Lowest current workload relative to the technician's maximum |
+| Round robin | Takes turns through the available technicians |
+
+Unavailable technicians and those at their workload limit are never chosen. The *Assign* tab on an incident shows the
+ranking with reasons (top 5, or all technicians), and any of them can be picked manually.
+
+### SLA management
+
+- Default policies per priority, plus optional service-specific policies (for example, a premium policy for the
+  Payment Gateway). The most specific active policy is applied.
+
+  | Priority | Response target | Resolution target |
+  |---|---|---|
+  | P1 | 5 min | 30 min |
+  | P2 | 15 min | 2 h |
+  | P3 | 1 h | 8 h |
+  | P4 | 4 h | 24 h |
+
+- Response and resolution deadlines are calculated and shown as a live clock on each incident.
+- A background monitor runs every 30 seconds: it sends a warning when 75 % of the time is used (configurable per
+  policy), records response and resolution violations, escalates, and auto-closes stale resolutions.
+- SLA status (on track, at risk, breached, met) is shown on every incident, can be used as a search filter and appears on the dashboards.
+
+### Notifications
+
+Three channels: **in-app** (bell icon and notifications page), **e-mail** (real Gmail SMTP or simulated) and
+**SMS** (third-party SMS API through an adapter, simulated). Each event goes to the right people:
+
+| Event | Who is notified |
+|---|---|
+| Incident created | Reporter |
+| Incident assigned / reassigned | Technician (all channels for P1), reporter in-app |
+| Acknowledged, work started, priority or category changed | Reporter in-app |
+| Information requested / provided | Reporter / technician |
+| Resolved, closed, marked duplicate | Reporter |
+| Reopened, reporter comment, feedback received | Technician |
+| SLA approaching | Technician, Team Leads |
+| SLA violated | Technician (SMS), administrators (e-mail) |
+| Escalation | Level 1 Team Leads → level 2 administrators → level 3 IT Manager |
+| Automatic assignment failed | Administrators |
+
+Administrators can switch e-mail and SMS off and see every message in the notification outbox.
+
+### Audit trail
+
+Every important action is recorded with timestamp, user, action, incident ID, previous status, new status and a
+description: creation, classification, priority calculation, SLA applied, assignment, every lifecycle step, notes,
+SLA warnings, violations, escalations, logins (including failed ones) and administrator changes. Each incident page
+shows its own timeline; administrators can search the whole log.
+
+### Search, filtering and reporting
+
+- Incident search with 12 criteria: incident ID, keyword (title/description), status, priority, category, service,
+  technician, SLA status, created-from date, created-to date, open only, unassigned only.
+- Role-specific dashboards with charts (see the portals above). Employees and technicians see their own figures;
+  administrators see the whole organisation, per-service analysis and technician workload.
+
+### Intelligent features
+
+1. **Automatic categorisation**: suggests the category while the employee types, combining keyword matching (50 %),
+   the categories of the most similar past incidents (25 %) and the service's usual category (25 %).
+   Optionally uses an LLM through any OpenAI-compatible API.
+2. **Duplicate detection**: compares the text with open incidents (word similarity with synonyms and stemming, boosted
+   for the same service), warns the employee before submitting, and flags strong matches automatically.
+3. **Incident correlation**: groups open incidents on the same service and category in a time window and highlights a
+   suspected major incident (three or more incidents, or one containing a P1).
+4. **Automatic escalation**: P1/P2 incidents not acknowledged within the response target escalate one level per missed
+   window: Technician → Team Lead → System Administrator → IT Manager.
+5. **Smart technician recommendation**: the multi-factor ranking above, with the reasons shown.
+6. **SLA risk prediction**: compares the time left with the effort similar incidents needed in the past and ranks open
+   incidents as high, medium or low risk.
+7. **Suggested resolutions**: shows how the most similar solved incidents were fixed, ranked by similarity and rating.
+
+### Error handling
+
+Clear messages, never stack traces, for: invalid login, unauthorised operation, invalid input (with the error shown next
+to each field), invalid incident or state transition, technician unavailable, technician workload exceeded, service not
+found, missing SLA configuration, duplicate incident, database failure and external service failure (SMS, e-mail, AI).
+An SMTP or SMS failure never stops the incident operation itself.
+
+### Security
+
+BCrypt password hashing, signed login tokens (JWT, 8-hour expiry), role-based authorisation on every endpoint,
+employees limited to their own incidents, internal notes hidden from employees, server-side input validation,
+failed logins recorded in the audit log, and credentials read only from environment variables.
+
+### Persistence
+
+All data (users, technicians, services, categories, incidents, notes, SLA policies, violations, audit records,
+notifications and settings) is stored in an H2 relational database through JPA, and survives restarts.
+
+---
+
 ## Quick start
 
 Requirements: **JDK 21 or newer** (developed with Temurin JDK 25) and an internet connection for the first build.
@@ -95,20 +269,18 @@ Without a key the built-in keyword + history classifier is used, so the app work
 | ≥ 2 notification mechanisms | In-app, e-mail (real Gmail SMTP or simulated), SMS (third-party API via Adapter) |
 | Complete audit history | `AuditTrailListener`, `/api/audit`, incident timeline |
 | ≥ 5 search criteria | ID, keyword, status, priority, category, service, technician, SLA status, date range, open/unassigned |
-| ≥ 2 intelligent features | 7 — see below |
+| ≥ 2 intelligent features | 7, listed in the table below |
 | Persistence | H2 database through Spring Data repositories |
 
-### Intelligent features
-
-1. **Automatic categorisation** — ensemble of keyword matching (50 %), k-nearest-neighbour on past incidents (25 %) and the service's usual category (25 %); optional LLM.
-2. **Duplicate detection** — TF cosine similarity with synonyms + stemming, boosted for the same service; warns while the employee types.
-3. **Incident correlation / major-incident detection** — groups open incidents by service and category in a time window.
-4. **Automatic escalation** — P1–P2 incidents not acknowledged within the response target escalate one level per missed window: Technician → Team Lead → System Administrator → IT Manager.
-5. **Smart technician recommendation** — multi-factor score (skill, spare capacity, experience, service history, seniority) with reasons.
-6. **SLA risk prediction** — compares remaining time with expected effort learned from historical resolution times.
-7. **Suggested resolutions** — resolutions of the most similar solved incidents, ranked by similarity and user rating.
-
-Plus: auto-close of unverified resolved incidents after 72 h, and user feedback ratings.
+| Intelligent feature | Class | Technique |
+|---|---|---|
+| Automatic categorisation | `KeywordCategoryClassifier`, `LlmCategoryClassifier` | Weighted ensemble of keyword matching, k-nearest-neighbour on past incidents and the service's default category; optional LLM |
+| Duplicate detection | `DuplicateDetector`, `TextAnalyzer` | Term-frequency cosine similarity with synonyms and stemming |
+| Incident correlation | `CorrelationAnalyzer` | Grouping open incidents by service and category within a time window |
+| Automatic escalation | `SlaMonitorService` | Scheduled check of unacknowledged P1/P2 incidents against the response target |
+| Smart technician recommendation | `SmartAssignmentStrategy` | Multi-factor weighted score with explanations |
+| SLA risk prediction | `SlaRiskPredictor` | Remaining time vs. expected effort learned from historical resolution times |
+| Suggested resolutions | `ResolutionSuggester` | Similar solved incidents ranked by similarity and user rating |
 
 ---
 
