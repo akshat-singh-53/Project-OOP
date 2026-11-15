@@ -58,7 +58,7 @@ powershell -ExecutionPolicy Bypass -File .\run-with-email.ps1 -GmailAddress you@
 
 The script asks for the App Password (hidden input) and keeps it only in memory. Credentials are read from the
 `ITSM_MAIL_USERNAME` / `ITSM_MAIL_PASSWORD` environment variables and are never stored in the code or the repository.
-Seeded demo users have `@itsm.local` addresses, which are skipped; `-RedirectTo` sends every notification to one inbox
+Seeded demo users have `.local` addresses, which are skipped; `-RedirectTo` sends every notification to one inbox
 (the original recipient is shown in the subject). Mail is sent on a background thread, so a slow SMTP server never
 delays an incident operation. Administrators can check the channel with *Strategies & settings → Send a test e-mail*.
 
@@ -203,7 +203,9 @@ npm run e2e:lifecycle    # report -> assign -> acknowledge -> start -> resolve -
 
 ---
 
-## Demo workflows (for the video)
+## Example workflows
+
+Three end-to-end scenarios to try after starting the app:
 
 1. **Employee reports → system prioritises → technician assigned → notified** — log in as `amit`, *Report an incident*
    on *Payment Gateway*; watch the live category suggestion and duplicate warning; open the incident to see P1,
@@ -222,6 +224,10 @@ all input is validated with Bean Validation; errors never expose stack traces. F
 `ITSM_JWT_SECRET`, serve over HTTPS and switch to a server database.
 
 ## API overview
+
+The React frontend talks to the backend only through this REST API (JSON over HTTP, with the login token sent in the
+`Authorization: Bearer` header), so any other client — a mobile app, a script or another system — could use it too.
+The main endpoints:
 
 | Method & path | Purpose |
 |---|---|
