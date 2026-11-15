@@ -5,6 +5,8 @@ backend/target/
 
 # Local H2 database files (re-created and re-seeded on first start)
 backend/data
+docs/learning-guide.html
+docs/I-ITSM-Learning-Guide.pdf
 backend/data-backup-*//
 *.db
 *.trace.db

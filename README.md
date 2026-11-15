@@ -152,7 +152,7 @@ frontend/                     React single-page app
   src/pages/                  role pages (employee, technician, admin)
   src/components/             layout, tables, badges
   e2e/                        Playwright browser tests
-docs/                         screenshots and learning guide
+docs/                         screenshots
 ```
 
 ---
