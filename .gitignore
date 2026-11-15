@@ -1,0 +1,29 @@
+# Build output
+backend/target/
+*.class
+*.jar
+
+# Local H2 database files (re-created and re-seeded on first start)
+backend/data
+backend/data-backup-*//
+*.db
+*.trace.db
+
+# Node.js installed by the Maven build, and npm packages
+frontend/node/
+frontend/node_modules/
+frontend/dist/
+
+# UI test output
+frontend/e2e/screenshots/
+
+# Course hand-out (not part of the submission code)
+OOP_S1_2026-2027_Project.pdf
+
+# Logs and IDE files
+*.log
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
